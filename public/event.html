@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>이벤트 보기 - 스케줄 조율</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1 id="eventTitle">이벤트</h1>
+    <nav></nav>
+  </header>
+  <main>
+    <div id="eventInfo"></div>
+    <div id="message" class="message" style="display:none;"></div>
+    <div id="ownerControls" class="controls" style="display:none;">
+      <button id="deleteEventBtn" style="background-color:#e53935;color:#fff;border:none;border-radius:4px;">이벤트 삭제</button>
+    </div>
+    <div class="grid-container">
+      <table class="schedule-table" id="scheduleTable"></table>
+    </div>
+  </main>
+  <!-- Tooltip for names -->
+  <div id="tooltip" class="tooltip" style="display:none;"></div>
+  <script src="/main.js"></script>
+  <script>
+    (async function() {
+      await renderNav();
+      const urlParams = new URLSearchParams(window.location.search);
+      const eventId = parseInt(urlParams.get('id'), 10);
+      if (!eventId) {
+        alert('이벤트 ID가 없습니다.');
+        location.href = '/';
+        return;
+      }
+      const user = await getCurrentUser();
+      let eventData = null;
+      async function loadEvent() {
+        const data = await apiFetch(`/api/event/${eventId}`, { method: 'GET' });
+        eventData = data;
+        // Update header
+        document.getElementById('eventTitle').textContent = data.event.title;
+        document.getElementById('eventInfo').textContent = `${formatDateTime(data.event.startISO)} ~ ${formatDateTime(data.event.endISO)}, ${data.event.slotMinutes}분 간격`;
+        buildTable();
+        // Show delete button if current user is owner
+        if (user && user.id === data.event.ownerId) {
+          const controls = document.getElementById('ownerControls');
+          controls.style.display = 'flex';
+          document.getElementById('deleteEventBtn').onclick = async function() {
+            if (!confirm('이 이벤트를 정말 삭제하시겠습니까? 되돌릴 수 없습니다.')) return;
+            try {
+              await apiFetch(`/api/event/${eventId}`, { method: 'DELETE' });
+              alert('이벤트가 삭제되었습니다.');
+              location.href = '/';
+            } catch (err) {
+              alert(err.data.error || '삭제 실패');
+            }
+          };
+        }
+      }
+      // Build schedule table
+      function buildTable() {
+        const table = document.getElementById('scheduleTable');
+        table.innerHTML = '';
+        const { event, aggregated, maxCount, userSlots } = eventData;
+        const start = new Date(event.startISO);
+        const end = new Date(event.endISO);
+        const slotMs = event.slotMinutes * 60 * 1000;
+        const slotCount = Math.ceil((end - start) / slotMs);
+        // Collect slot information with chronological ordering
+        const slotInfo = [];
+        for (let i = 0; i < slotCount; i++) {
+          const slotDate = new Date(start.getTime() + i * slotMs);
+          const dayKey = slotDate.toISOString().slice(0, 10);
+          const hours = slotDate.getHours().toString().padStart(2, '0');
+          const minutes = slotDate.getMinutes().toString().padStart(2, '0');
+          const timeKey = `${hours}:${minutes}`;
+          slotInfo.push({ index: i, dayKey, timeKey, date: slotDate });
+        }
+        // Build a map from day+time to slot index for quick lookup
+        const slotMap = {};
+        for (const info of slotInfo) {
+          slotMap[`${info.dayKey}-${info.timeKey}`] = info;
+        }
+
+        // Determine unique days in order of first appearance
+        const days = [];
+        const daySet = new Set();
+        for (const info of slotInfo) {
+          if (!daySet.has(info.dayKey)) {
+            daySet.add(info.dayKey);
+            days.push(info.dayKey);
+          }
+        }
+        // Determine unique times in order of first appearance
+        const times = [];
+        const timeSet = new Set();
+        for (const info of slotInfo) {
+          if (!timeSet.has(info.timeKey)) {
+            timeSet.add(info.timeKey);
+            times.push(info.timeKey);
+          }
+        }
+        // Build header
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        const cornerTh = document.createElement('th');
+        cornerTh.textContent = '';
+        headerRow.appendChild(cornerTh);
+        for (const day of days) {
+          const th = document.createElement('th');
+          const d = new Date(day);
+          const options = { month: 'short', day: 'numeric', weekday: 'short' };
+          th.textContent = `${d.toLocaleDateString('ko-KR', options)}`;
+          headerRow.appendChild(th);
+        }
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        // Build body
+        const tbody = document.createElement('tbody');
+        for (const time of times) {
+          const tr = document.createElement('tr');
+          const timeTd = document.createElement('td');
+          timeTd.className = 'time-label';
+          timeTd.textContent = time;
+          tr.appendChild(timeTd);
+          for (const day of days) {
+            const td = document.createElement('td');
+            td.className = 'cell';
+            const key = `${day}-${time}`;
+            const info = slotMap[key];
+            if (!info) {
+              td.classList.add('disabled');
+            } else {
+              const idx = info.index;
+              td.dataset.slot = idx;
+              const agg = aggregated[idx] || { count: 0, names: [] };
+              const ratio = maxCount > 0 ? agg.count / maxCount : 0;
+              const lightness = 95 - ratio * 45;
+              td.style.backgroundColor = `hsl(135, 60%, ${lightness}%)`;
+              if (userSlots && userSlots.includes(idx)) {
+                td.classList.add('selected');
+                td.style.outline = '2px solid #4f8dff';
+              }
+              td.dataset.names = agg.names.join(', ');
+              td.dataset.count = agg.count;
+              // Click handler
+              td.addEventListener('click', async ev => {
+                if (!user) return;
+                const slotIdx = parseInt(ev.currentTarget.dataset.slot);
+                if (isNaN(slotIdx)) return;
+                const isSelected = userSlots.includes(slotIdx);
+                let newSlots;
+                if (isSelected) {
+                  newSlots = userSlots.filter(s => s !== slotIdx);
+                } else {
+                  newSlots = userSlots.concat(slotIdx);
+                }
+                try {
+                  await saveSlots(newSlots);
+                  const newData = await apiFetch(`/api/event/${eventId}`, { method: 'GET' });
+                  eventData.aggregated = newData.aggregated;
+                  eventData.maxCount = newData.maxCount;
+                  eventData.userSlots = newData.userSlots;
+                  userSlots.length = 0;
+                  Array.prototype.push.apply(userSlots, newData.userSlots);
+                  buildTable();
+                } catch (err) {
+                  console.error(err);
+                }
+              });
+              // Tooltip
+              td.addEventListener('mouseenter', () => {
+                const names = td.dataset.names;
+                const count = td.dataset.count;
+                if (!names || names.length === 0) return;
+                const tooltip = document.getElementById('tooltip');
+                tooltip.innerHTML = `<strong>${count}명</strong><br>` + names.split(', ').join('<br>');
+                tooltip.style.display = 'block';
+                const rect = td.getBoundingClientRect();
+                tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                tooltip.style.top = `${rect.top - tooltip.offsetHeight - 8 + window.scrollY}px`;
+              });
+              td.addEventListener('mouseleave', () => {
+                document.getElementById('tooltip').style.display = 'none';
+              });
+            }
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        // Show message if not logged
+        const msgDiv = document.getElementById('message');
+        if (!user) {
+          msgDiv.style.display = 'block';
+          msgDiv.textContent = '참여자 정보와 일정 선택을 위해 로그인해주세요.';
+        } else {
+          msgDiv.style.display = 'none';
+        }
+      }
+      async function saveSlots(slots) {
+        try {
+          await apiFetch(`/api/event/${eventId}/availability`, {
+            method: 'POST',
+            body: JSON.stringify({ slots })
+          });
+        } catch (err) {
+          console.error(err);
+        }
+      }
+      // Load event initially
+      await loadEvent();
+    })();
+  </script>
+</body>
+</html>

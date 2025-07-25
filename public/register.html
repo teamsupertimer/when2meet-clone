@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>회원가입 - 스케줄 조율</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>회원가입</h1>
+    <nav></nav>
+  </header>
+  <main>
+    <form id="registerForm">
+      <label for="username">아이디</label>
+      <input type="text" id="username" required>
+      <label for="password">비밀번호</label>
+      <input type="password" id="password" required>
+      <button type="submit">회원가입</button>
+      <p style="margin-top:1rem;">이미 계정이 있으신가요? <a href="/login.html">로그인</a></p>
+    </form>
+  </main>
+  <script src="/main.js"></script>
+  <script>
+    (async function() {
+      await renderNav();
+      document.getElementById('registerForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        try {
+          await apiFetch('/api/register', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+          });
+          location.href = '/';
+        } catch (err) {
+          alert(err.data.error || '회원가입 실패');
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

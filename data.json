@@ -1,0 +1,18 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "test",
+      "salt": "dd5b8cc3d20f16f7f340f2df005d72d5",
+      "passwordHash": "d3f1586be616bc4b8fa94e7343f99eee0013f2d601e7e7eceae0998db3b558e27fcd56f22167cd2e2e2fc6194b8afebd77858fcb662b158e525bc0a191f6ca52"
+    },
+    {
+      "id": 2,
+      "username": "owner",
+      "salt": "78f1fdc0fa9568dec7c051cfe22bfe02",
+      "passwordHash": "2d005f5268e2fc5a6aabdd29dd4396887ecd3560932dab7a8fc06b055371a5343a1fa3c2b2179f41897556c40b156c00b04372ae00e975b340ba2c0db8fcbb97"
+    }
+  ],
+  "events": [],
+  "availability": []
+}

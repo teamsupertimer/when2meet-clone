@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>새 이벤트 생성 - 스케줄 조율</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>새 이벤트 생성</h1>
+    <nav></nav>
+  </header>
+  <main>
+    <form id="createForm">
+      <label for="title">이벤트 이름</label>
+      <input type="text" id="title" required>
+      <label for="startDate">시작 날짜</label>
+      <input type="date" id="startDate" required>
+      <label for="startTime">시작 시간</label>
+      <input type="time" id="startTime" required>
+      <label for="endDate">종료 날짜</label>
+      <input type="date" id="endDate" required>
+      <label for="endTime">종료 시간</label>
+      <input type="time" id="endTime" required>
+      <label for="slot">타임 슬롯 (분)</label>
+      <select id="slot">
+        <option value="15">15</option>
+        <option value="30" selected>30</option>
+        <option value="60">60</option>
+      </select>
+      <button type="submit">이벤트 생성</button>
+    </form>
+  </main>
+  <script src="/main.js"></script>
+  <script>
+    (async function() {
+      await renderNav();
+      const user = await getCurrentUser();
+      if (!user) {
+        // redirect to login
+        alert('이 페이지는 로그인 후 이용할 수 있습니다.');
+        location.href = '/login.html';
+        return;
+      }
+      document.getElementById('createForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const title = document.getElementById('title').value.trim();
+        const startDate = document.getElementById('startDate').value;
+        const startTime = document.getElementById('startTime').value;
+        const endDate = document.getElementById('endDate').value;
+        const endTime = document.getElementById('endTime').value;
+        const slotMinutes = document.getElementById('slot').value;
+        // Combine date and time into local ISO strings
+        const start = new Date(`${startDate}T${startTime}`);
+        const end = new Date(`${endDate}T${endTime}`);
+        if (!(start.getTime() < end.getTime())) {
+          alert('종료 시각은 시작 시각보다 뒤여야 합니다.');
+          return;
+        }
+        const startISO = start.toISOString();
+        const endISO = end.toISOString();
+        try {
+          const res = await apiFetch('/api/events', {
+            method: 'POST',
+            body: JSON.stringify({ title, startISO, endISO, slotMinutes: Number(slotMinutes) })
+          });
+          // Redirect to event page
+          location.href = `/event.html?id=${res.event.id}`;
+        } catch (err) {
+          alert(err.data.error || '생성 실패');
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

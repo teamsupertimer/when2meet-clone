@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>When2Meet Clone</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>스케줄 조율 서비스</h1>
+    <nav></nav>
+  </header>
+  <main>
+    <h2>이벤트 목록</h2>
+    <ul class="event-list" id="eventList"></ul>
+    <!-- 광고/홍보 영역 -->
+    <div id="adSection" class="message" style="background-color:#e0f7fa;color:#006064; margin-top:2rem; text-align:center;">
+      <p style="margin:0.5rem 0;"><strong>유니브튜터 채널을 구독하고 무료 강의를 받아보세요!</strong></p>
+      <a href="https://www.youtube.com/@univtutor" target="_blank" style="color:#00838f; text-decoration:underline;">유니브튜터 채널 바로가기</a>
+    </div>
+  </main>
+  <script src="/main.js"></script>
+  <script>
+    // Initialize page
+    (async function() {
+      await renderNav();
+      // Fetch events
+      const data = await apiFetch('/api/events', { method: 'GET' });
+      const list = document.getElementById('eventList');
+      if (data.events.length === 0) {
+        list.innerHTML = '<li>아직 생성된 이벤트가 없습니다. 상단 메뉴에서 새 이벤트를 생성하세요.</li>';
+      } else {
+        const user = await getCurrentUser();
+        for (const ev of data.events) {
+          const li = document.createElement('li');
+          const link = document.createElement('a');
+          link.className = 'title';
+          link.href = `/event.html?id=${ev.id}`;
+          link.textContent = ev.title;
+          const span = document.createElement('span');
+          span.className = 'timespan';
+          span.textContent = `${formatDateTime(ev.startISO)} ~ ${formatDateTime(ev.endISO)}`;
+          li.appendChild(link);
+          li.appendChild(span);
+          if (user && user.id === ev.ownerId) {
+            const del = document.createElement('a');
+            del.href = '#';
+            del.textContent = '삭제';
+            del.style.color = '#e53935';
+            del.style.marginLeft = '1rem';
+            del.addEventListener('click', async e => {
+              e.preventDefault();
+              if (!confirm('이 이벤트를 삭제하시겠습니까?')) return;
+              try {
+                await apiFetch(`/api/event/${ev.id}`, { method: 'DELETE' });
+                li.remove();
+              } catch (err) {
+                alert(err.data.error || '삭제 실패');
+              }
+            });
+            li.appendChild(del);
+          }
+          list.appendChild(li);
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
